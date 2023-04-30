@@ -68,7 +68,7 @@ class Orbit:
         while E - e * np.sin(E) - M > 10 ** (-8):
             E = E - (E - e * np.sin(E) - M) / (1 - e * np.cos(E))
         nu = 2 * np.arctan(np.sqrt((1 + e) / (1 - e)) * np.tan(E / 2))
-        radius = self.radius_equation(nu)
+        radius = self.radiusEquation(nu)
         return nu, radius
 
     def keplerEquation(self, E):
@@ -201,7 +201,7 @@ class ExoSimulation:
         fig = plt.figure()
         # Orbit Plot
         ax1 = fig.add_subplot(121, projection='polar')
-        radii, angles = self.planet.orbit.orbit_trace()
+        radii, angles = self.planet.orbit.orbitalTrace()
         trace = ax1.plot(angles, radii, c='b')
         angle, radius = self.planet.orbit.orbitalPosition(t)
         position = ax1.scatter(angle, radius, c='darkblue', alpha=0.5)
