@@ -50,8 +50,7 @@ class Star:
 
 
 class Orbit:
-    def __init__(self, semi_M_axis=1, eccentricity=0.01671, foyer=Star()):
-        self.semi_M_axis = semi_M_axis * 1.49 * 10 ** 11
+    def __init__(self, semiMajorAxis=1, eccentricity=0.01671, foyer=Star()):
         self.semiMajorAxis = semiMajorAxis * 1.49 * 10 ** 11
         self.eccentricity = eccentricity
         self.foyer = foyer
