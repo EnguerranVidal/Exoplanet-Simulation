@@ -13,19 +13,55 @@ class Star:
         self.flux = 5.670374419 * 10 ** (-8) * self.temperature ** 4
         self.luminosity = self.flux * 4 * np.pi * self.radius ** 2
 
+    def peakWaveLength(self, temperature=None):
+        if temperature is None:
+            temperature = self.temperature
+        return 2.897771955 * 10 ** (-3) * temperature
+
+    def peakFrequency(self, temperature=None):
+        if temperature is None:
+            temperature = self.temperature
+        return 5.879 * 10 ** 10 * temperature
+
+    def emissionSpectrum(self, start, end, N, temperature=None, plot=False):
+        wavelengths = np.linspace(start, end, num=N)
+        if temperature is None:
+            temperature = self.temperature
+        h = 6.62607015 * 10 ** (-34)  # Planck Constant
+        c = 299792458  # Speed of light
+        k = 1.380649 * 10 ** (-23)  # Boltzmann constant
+        e0 = 8.85418781762039 * 10 ** (-12)  # Vacuum permittivity
+        intensities = (2 * h * c ** 2 * e0) / (wavelengths ** 5 * (np.exp(h * c / (wavelengths * k * temperature)) - 1))
+
+        if plot:
+            fig = go.Figure(data=go.Scatter(x=wavelengths, y=intensities))
+            fig.update_layout(
+                title="Emission Spectrum",
+                xaxis_title="Wavelength (log scale)",
+                yaxis_title="Intensity",
+            )
+            fig.add_shape(type="rect", xref="x", yref="paper",
+                x0=4 * 10 ** (-7), y0=0,
+                x1=8 * 10 ** (-7), y1=1,
+                fillcolor="red", opacity=0.2, layer="below",
+            )
+            fig.show()
+        return intensities
+
 
 class Orbit:
     def __init__(self, semi_M_axis=1, eccentricity=0.01671, foyer=Star()):
         self.semi_M_axis = semi_M_axis * 1.49 * 10 ** 11
+        self.semiMajorAxis = semiMajorAxis * 1.49 * 10 ** 11
         self.eccentricity = eccentricity
         self.foyer = foyer
         self.G = 6.6740831 * 10 ** (-11)
-        self.period = self.period_calculus()
+        self.period = self.orbitalPeriod()
 
-    def period_calculus(self):
-        return np.sqrt((4 * (np.pi ** 2) * self.semi_M_axis ** 3) / (self.foyer.mass * self.G))
+    def orbitalPeriod(self):
+        return np.sqrt((4 * (np.pi ** 2) * self.semiMajorAxis ** 3) / (self.foyer.mass * self.G))
 
-    def polar_position(self, epoch):
+    def orbitalPosition(self, epoch):
         n = (2 * np.pi) / self.period
         M = n * epoch
         e = self.eccentricity
@@ -36,20 +72,20 @@ class Orbit:
         radius = self.radius_equation(nu)
         return nu, radius
 
-    def kepler_equation(self, E):
+    def keplerEquation(self, E):
         return E - self.eccentricity * np.sin(E)
 
-    def radius_equation(self, anomaly):
-        return (self.semi_M_axis * (1 - self.eccentricity ** 2)) / (1 + self.eccentricity * np.cos(anomaly))
+    def radiusEquation(self, anomaly):
+        return (self.semiMajorAxis * (1 - self.eccentricity ** 2)) / (1 + self.eccentricity * np.cos(anomaly))
 
-    def orbit_trace(self, N=360):
+    def orbitalTrace(self, N=360):
         anomalies = np.linspace(-np.pi, np.pi, N)
-        radii = self.radius_equation(anomalies)
+        radii = self.radiusEquation(anomalies)
         return radii, anomalies
 
-    def plot_orbit(self, N):
+    def orbitalPlot(self, N):
         anomalies = np.linspace(-np.pi, np.pi, N)
-        radii = self.radius_equation(anomalies)
+        radii = self.radiusEquation(anomalies)
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
         ax.plot(anomalies, radii)
         ax.set_rticks([0.5, 1, 1.5, 2])  # Less radial ticks
@@ -125,7 +161,7 @@ class PlanetNoAtm:
             return self.axial_tilt
 
     def insolation(self, t):
-        anomaly, radius = self.orbit.polar_position(t)
+        anomaly, radius = self.orbit.orbitalPosition(t)
         # HOUR ANGLE
         if self.rotation_type != 'tidally_locked':
             assert self.rotation_rate is not None
@@ -168,12 +204,12 @@ class ExoSimulation:
         ax1 = fig.add_subplot(121, projection='polar')
         radii, angles = self.planet.orbit.orbit_trace()
         trace = ax1.plot(angles, radii, c='b')
-        angle, radius = self.planet.orbit.polar_position(t)
+        angle, radius = self.planet.orbit.orbitalPosition(t)
         position = ax1.scatter(angle, radius, c='darkblue', alpha=0.5)
         # Heatmap plot
         ax2 = fig.add_subplot(122)
         I = self.planet.insolation(t)
-        # heatmap = ax2.imshow(self.planet.temperatures, vmin=0, vmax=400, cmap='inferno')
+        # heatmap = ax2.imshow(self.planets.temperatures, vmin=0, vmax=400, cmap='inferno')
         heatmap = ax2.imshow(I, vmin=0, vmax=1500, cmap='inferno')
         plt.colorbar(heatmap)
         # MAIN LOOP
@@ -186,11 +222,11 @@ class ExoSimulation:
             I = self.planet.insolation(t)
             # Orbit Computing
             t = t + dt
-            radius, angle = self.planet.orbit.polar_position(t)
+            radius, angle = self.planet.orbit.orbitalPosition(t)
             Offset = np.array([radius, angle])
             Offset = Offset
             # Updating plot
-            # heatmap.set_data(self.planet.temperatures)
+            # heatmap.set_data(self.planets.temperatures)
             heatmap.set_data(I)
             position.set_offsets(Offset)
             plt.draw()
