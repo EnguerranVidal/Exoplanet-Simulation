@@ -16,7 +16,7 @@ class Star:
     def peakWaveLength(self, temperature=None):
         if temperature is None:
             temperature = self.temperature
-        return 2.897771955 * 10 ** (-3) * temperature
+        return 2.897771955 * 10 ** (-3) / temperature
 
     def peakFrequency(self, temperature=None):
         if temperature is None:
@@ -37,7 +37,7 @@ class Star:
             fig = go.Figure(data=go.Scatter(x=wavelengths, y=intensities))
             fig.update_layout(
                 title="Emission Spectrum",
-                xaxis_title="Wavelength (log scale)",
+                xaxis_title="Wavelength",
                 yaxis_title="Intensity",
             )
             fig.add_shape(type="rect", xref="x", yref="paper",

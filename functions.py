@@ -1,5 +1,8 @@
 import numpy as np
-from scipy.interpolate import interp2d
+import noise
+import opensimplex
+from matplotlib import pyplot as plt
+from scipy.interpolate import griddata
 import plotly.graph_objects as go
 from scipy.spatial import SphericalVoronoi, geometric_slerp
 
@@ -28,7 +31,7 @@ def fibonacciSphereDistribution(samples=1000, plot=False):
     return np.column_stack((x, y, z))
 
 
-def geodesicDistance(point1, point2, radius=1, center=np.array([0, 0, 0])):
+def geodesicDistance(point1, point2, radius=1):
     # point1, point2 = point1 - center, point2 - center
     point1, point2 = point1 / radius, point2 / radius
     dotProduct = np.dot(point1, point2)
@@ -58,8 +61,24 @@ def interpolateMercator(longitudes, latitudes, values, nbLongitudes=1000, nbLati
     newLongitudes = np.linspace(-np.pi, np.pi, num=nbLongitudes)
     newLatitudes = np.linspace(-np.pi / 2, np.pi / 2, num=nbLatitudes)
     meshLongitudes, meshLatitudes = np.meshgrid(newLongitudes, newLatitudes)
-    interpolationFunction = interp2d(longitudes, latitudes, values, kind='linear')
-    return interpolationFunction(meshLongitudes, meshLatitudes)
+
+    gridValues = griddata((longitudes, latitudes), values, (meshLongitudes, meshLatitudes), method='linear')
+    return gridValues
+
+
+def cartesianToGeographic(points):
+    X, Y, Z = points[:, 0], points[:, 1], points[:, 2]
+    radii = np.sqrt(X ** 2 + Y ** 2 + Z ** 2)
+    longitudes = np.arctan2(Y / radii, X / radii)
+    latitudes = np.arcsin(Z / radii)
+    return radii, longitudes, latitudes
+
+
+def geographicToCartesian(radii, longitudes, latitudes):
+    X = radii * np.cos(latitudes) * np.cos(longitudes)
+    Y = radii * np.cos(latitudes) * np.sin(longitudes)
+    Z = radii * np.sin(latitudes)
+    return np.column_stack((X, Y, Z))
 
 
 def sphericalVoronoiEqualCells(points, radius=1, center=np.array([0, 0, 0]), plot=False, stats=False):
@@ -114,3 +133,25 @@ def sphericalVoronoiEqualCells(points, radius=1, center=np.array([0, 0, 0]), plo
         cells[-1]['AREA'] = areas[region_index]
 
     return cells
+
+
+def generateNoise3D(points, seed=0):
+    simplex = opensimplex.OpenSimplex(seed)
+    size = points.shape[0]
+    noiseMap = np.zeros(size, dtype=float)
+    for i in range(size):
+        noiseMap[i] = simplex.noise3(points[i, 0], points[i, 1], points[i, 2])
+    return noiseMap
+
+
+def generateContinents(points, seed=0, threshold=0., plot=False):
+    noiseMap = generateNoise3D(points, seed=seed)
+    submerged = noiseMap < threshold
+    noiseMap[submerged] = 0
+    noiseMap[~submerged] = 1
+    if plot:
+        R, longitudes, latitudes = cartesianToGeographic(points)
+        image = interpolateMercator(longitudes, latitudes, noiseMap, nbLongitudes=1000, nbLatitudes=500)
+        plt.imshow(image, cmap='gray')
+        plt.show()
+    return noiseMap
