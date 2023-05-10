@@ -1,18 +1,21 @@
-from generator import *
 from classes import *
+from functions import *
 
 
 def testGeneration():
-    image = elevation_map_ocean(600, 300, 1, 80, 0.5)
-    sphere_plot(image)
-    # land_value = np.chararray(shape=image.shape)
-    # print(land_value)
+    seed = 10
+    octaves = 10
+    scale = 1
+    threshold = 0.0
+    strength = 1.0
+    points = sunflowerSphereDistribution(10000)
+    noiseMap = generateContinents(points, seed, threshold, octaves, scale, strength, plot=True)
 
 
 def test_orbit():
     Sun = Star()
     orbit = Orbit(foyer=Sun)
-    orbit.plot_orbit(1000)
+    orbit.orbitalPlot(1000)
 
 
 def testPlanet():
@@ -25,4 +28,4 @@ def testPlanet():
 
 
 if __name__ == '__main__':
-    testPlanet()
+    testGeneration()

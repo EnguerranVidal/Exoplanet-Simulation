@@ -1,10 +1,14 @@
 import numpy as np
-import noise
 import opensimplex
-from matplotlib import pyplot as plt
-from scipy.interpolate import griddata
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib import cm
 import plotly.graph_objects as go
+import cartopy.crs as ccrs
+
 from scipy.spatial import SphericalVoronoi, geometric_slerp
+from scipy.ndimage import gaussian_filter
+from scipy.interpolate import griddata, Rbf
 
 
 def hours_to_seconds(t):
@@ -57,17 +61,22 @@ def sunflowerSphereDistribution(samples=1000, plot=False):
     return np.column_stack((x, y, z))
 
 
-def interpolateMercator(longitudes, latitudes, values, nbLongitudes=1000, nbLatitudes=500):
-    newLongitudes = np.linspace(-np.pi, np.pi, num=nbLongitudes)
-    newLatitudes = np.linspace(-np.pi / 2, np.pi / 2, num=nbLatitudes)
-    meshLongitudes, meshLatitudes = np.meshgrid(newLongitudes, newLatitudes)
-
-    gridValues = griddata((longitudes, latitudes), values, (meshLongitudes, meshLatitudes), method='linear')
-    return gridValues
-
-
-def cartesianToGeographic(points):
+def interpolateSphere3D(points, values, num_latitudes, num_longitudes, method='nearest'):
+    # Convert the points from spherical coordinates to Cartesian coordinates
     X, Y, Z = points[:, 0], points[:, 1], points[:, 2]
+    # Create a grid of longitudes and latitudes
+    lon = np.linspace(0, 2*np.pi, num_longitudes)
+    lat = np.linspace(-np.pi/2, np.pi/2, num_latitudes)
+    lon, lat = np.meshgrid(lon, lat)
+    # Convert the grid points to Cartesian coordinates
+    gx, gy, gz = geographicToCartesian(np.ones_like(lon), lon, lat)
+    # Interpolate the values on the grid using nearest-neighbor interpolation
+    image = griddata((X, Y, Z), values, (gx, gy, gz), method)
+    return image
+
+
+
+def cartesianToGeographic(X, Y, Z):
     radii = np.sqrt(X ** 2 + Y ** 2 + Z ** 2)
     longitudes = np.arctan2(Y / radii, X / radii)
     latitudes = np.arcsin(Z / radii)
@@ -78,7 +87,7 @@ def geographicToCartesian(radii, longitudes, latitudes):
     X = radii * np.cos(latitudes) * np.cos(longitudes)
     Y = radii * np.cos(latitudes) * np.sin(longitudes)
     Z = radii * np.sin(latitudes)
-    return np.column_stack((X, Y, Z))
+    return X, Y, Z
 
 
 def sphericalVoronoiEqualCells(points, radius=1, center=np.array([0, 0, 0]), plot=False, stats=False):
@@ -125,33 +134,60 @@ def sphericalVoronoiEqualCells(points, radius=1, center=np.array([0, 0, 0]), plo
         cells.append({})
         neighbours = {}
         for other_index, other_region in enumerate(sv.regions):
+            vertices = list(set(region).intersection(other_region))
             if region_index != other_index and len(set(region).intersection(other_region)) >= 2:
-                vertices = list(set(region).intersection(other_region))
                 vertex1, vertex2 = sv.vertices[vertices[0]], sv.vertices[vertices[1]]
-                neighbours[other_index] = geodesicDistance(vertex1, vertex2, radius=1, center=center)
+                neighbours[other_index] = geodesicDistance(vertex1, vertex2, radius=1)
         cells[-1]['NEIGHBOURS'] = neighbours
         cells[-1]['AREA'] = areas[region_index]
-
+        cells[-1]['VERTICES'] = sv.vertices[region]
     return cells
 
 
-def generateNoise3D(points, seed=0):
+def generateNoise3D(points, seed=0, octaves=1, scale=1.0):
     simplex = opensimplex.OpenSimplex(seed)
     size = points.shape[0]
     noiseMap = np.zeros(size, dtype=float)
     for i in range(size):
-        noiseMap[i] = simplex.noise3(points[i, 0], points[i, 1], points[i, 2])
+        value = 0.0
+        amplitude = 1.0
+        frequency = 1.0
+        for _ in range(octaves):
+            value += simplex.noise3(points[i, 0] * frequency, points[i, 1] * frequency,
+                                    points[i, 2] * frequency) * amplitude
+            amplitude *= 0.5
+            frequency *= 2.0
+        noiseMap[i] = value * scale
     return noiseMap
 
 
-def generateContinents(points, seed=0, threshold=0., plot=False):
-    noiseMap = generateNoise3D(points, seed=seed)
+def generateContinents(points, seed=0, threshold=0., octaves=1, scale=1.0, strength=3.0, plot=False):
+    noiseMap = generateNoise3D(points, seed, octaves, scale)
     submerged = noiseMap < threshold
     noiseMap[submerged] = 0
-    noiseMap[~submerged] = 1
+    noiseMap[~submerged] = noiseMap[~submerged] / (sum([0.5 ** i for i in range(octaves)]))
+    noiseMap[~submerged] = noiseMap[~submerged] ** strength
+
     if plot:
-        R, longitudes, latitudes = cartesianToGeographic(points)
-        image = interpolateMercator(longitudes, latitudes, noiseMap, nbLongitudes=1000, nbLatitudes=500)
-        plt.imshow(image, cmap='gray')
+        image = interpolateSphere3D(points, noiseMap, num_longitudes=500, num_latitudes=250)
+        polesViewGraph(image)
+        plt.imshow(image, origin='lower')
+        plt.colorbar()
         plt.show()
+
     return noiseMap
+
+
+def polesViewGraph(image):
+    fig = plt.figure(figsize=(10, 5))
+    # AXIS 1
+    ax1 = fig.add_subplot(121, projection=ccrs.Orthographic(0, 90))
+    ax1.set_title("North Pole")
+    ax1.gridlines(color='black', linestyle='dotted')
+    ax1.imshow(image, origin="upper", extent=(-180, 180, -90, 90), transform=ccrs.PlateCarree())
+    # AXIS 2
+    ax2 = fig.add_subplot(122, projection=ccrs.Orthographic(0, -90))
+    ax2.set_title("South Pole")
+    ax2.gridlines(color='black', linestyle='dotted')
+    ax2.imshow(image, origin="upper", extent=(-180, 180, -90, 90), transform=ccrs.PlateCarree())
+    plt.show()
