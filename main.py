@@ -4,12 +4,17 @@ from functions import *
 
 def testGeneration():
     seed = 10
-    octaves = 10
-    scale = 1
-    threshold = 0.0
-    strength = 1.0
+    parameters = {'OCEAN_THRESHOLD': 0,
+                  'NB_OCTAVES': 10,
+                  'SCALE': 1,
+                  'STRENGTH': 1,
+                  'TERRAIN_ALBEDO': 0.3,
+                  'OCEAN_ALBEDO': 0.7,
+                  'CAPS_ALBEDO': 0.05,
+                  'CAPS_EXTENT': 30}
     points = sunflowerSphereDistribution(10000)
-    noiseMap = generateContinents(points, seed, threshold, octaves, scale, strength, plot=True)
+    generatePlanetMap(points, parameters, oceans=True, caps=True,
+                      seed=seed, plot=True)
 
 
 def test_orbit():

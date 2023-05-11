@@ -1,14 +1,14 @@
 import numpy as np
 import opensimplex
-import matplotlib as mpl
+
 import matplotlib.pyplot as plt
-from matplotlib import cm
+import matplotlib.colors as colors
+
 import plotly.graph_objects as go
 import cartopy.crs as ccrs
 
 from scipy.spatial import SphericalVoronoi, geometric_slerp
-from scipy.ndimage import gaussian_filter
-from scipy.interpolate import griddata, Rbf
+from scipy.interpolate import griddata
 
 
 def hours_to_seconds(t):
@@ -161,33 +161,84 @@ def generateNoise3D(points, seed=0, octaves=1, scale=1.0):
     return noiseMap
 
 
-def generateContinents(points, seed=0, threshold=0., octaves=1, scale=1.0, strength=3.0, plot=False):
-    noiseMap = generateNoise3D(points, seed, octaves, scale)
-    submerged = noiseMap < threshold
-    noiseMap[submerged] = 0
-    noiseMap[~submerged] = noiseMap[~submerged] / (sum([0.5 ** i for i in range(octaves)]))
-    noiseMap[~submerged] = noiseMap[~submerged] ** strength
+def generatePlanetMap(points, parameters: dict, oceans=True, caps=True, seed=0, plot=False):
+    threshold = parameters['OCEAN_THRESHOLD']
+    octaves = parameters['NB_OCTAVES']
+    scale = parameters['SCALE']
+    strength = parameters['STRENGTH']
+    terrainAlbedo = parameters['TERRAIN_ALBEDO']
+    oceanAlbedo = parameters['OCEAN_ALBEDO']
+    capsAlbedo = parameters['CAPS_ALBEDO']
+    capsExtent = parameters['CAPS_EXTENT']
+    radii, longitudes, latitudes = cartesianToGeographic(points[:, 0], points[:, 1], points[:, 2])
+    # ELEVATION MAP GENERATION
+    elevation = generateNoise3D(points, seed, octaves, scale)
+    if oceans:
+        submerged = elevation < threshold
+        elevation[~submerged] = elevation[~submerged] / (sum([0.5 ** i for i in range(octaves)]))
+        elevation[~submerged] = elevation[~submerged] ** strength
+        elevation[submerged] = 0
+    else:
+        elevation = elevation / (sum([0.5 ** i for i in range(octaves)]))
+        elevation = elevation ** strength
+
+    # ALBEDO MAP GENERATION
+    albedo = np.full_like(elevation, terrainAlbedo)
+    if oceans:
+        submerged = elevation <= threshold
+        print(np.any(elevation <= threshold))
+        albedo[submerged] = oceanAlbedo
+    if caps:
+        capNorthLatitude = np.pi / 2 - np.radians(capsExtent)
+        capSouthLatitude = - np.pi / 2 + np.radians(capsExtent)
+        frozenNorth = latitudes > capNorthLatitude
+        frozenSouth = latitudes < capSouthLatitude
+        albedo[frozenNorth] = capsAlbedo
+        albedo[frozenSouth] = capsAlbedo
 
     if plot:
-        image = interpolateSphere3D(points, noiseMap, num_longitudes=500, num_latitudes=250)
-        polesViewGraph(image)
-        plt.imshow(image, origin='lower')
-        plt.colorbar()
-        plt.show()
+        elevationImage = interpolateSphere3D(points, elevation, num_longitudes=500, num_latitudes=250)
+        albedoImage = interpolateSphere3D(points, albedo, num_longitudes=500, num_latitudes=250)
+        polesViewGraph([elevationImage, albedoImage], flip=[False, True])
 
-    return noiseMap
+    return albedo, elevation
 
 
-def polesViewGraph(image):
-    fig = plt.figure(figsize=(10, 5))
-    # AXIS 1
-    ax1 = fig.add_subplot(121, projection=ccrs.Orthographic(0, 90))
-    ax1.set_title("North Pole")
-    ax1.gridlines(color='black', linestyle='dotted')
-    ax1.imshow(image, origin="upper", extent=(-180, 180, -90, 90), transform=ccrs.PlateCarree())
-    # AXIS 2
-    ax2 = fig.add_subplot(122, projection=ccrs.Orthographic(0, -90))
-    ax2.set_title("South Pole")
-    ax2.gridlines(color='black', linestyle='dotted')
-    ax2.imshow(image, origin="upper", extent=(-180, 180, -90, 90), transform=ccrs.PlateCarree())
+def polesViewGraph(images, flip=None):
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    fig = plt.figure(figsize=(15, 8))
+    cmap = plt.get_cmap('inferno')
+    reversed_cmap = colors.ListedColormap(cmap.colors[::-1])
+    if isinstance(images, np.ndarray):
+        images = [images]
+    if flip is None:
+        flip = False
+
+    n_images = len(images)
+    for i, img in enumerate(images):
+        ax1 = fig.add_subplot(n_images, 3, (i * 3) + 1, projection=ccrs.Orthographic(0, 90))
+        if isinstance(flip, list) and flip[i]:
+            ax1.imshow(img, transform=ccrs.PlateCarree(), cmap=reversed_cmap)
+        else:
+            ax1.imshow(img, transform=ccrs.PlateCarree(), cmap=cmap)
+        ax1.gridlines(color='black', linestyle='dotted')
+
+        ax2 = fig.add_subplot(n_images, 3, (i * 3) + 2, projection=ccrs.Orthographic(0, -90))
+        if isinstance(flip, list) and flip[i]:
+            ax2.imshow(img, transform=ccrs.PlateCarree(), cmap=reversed_cmap)
+        else:
+            ax2.imshow(img, transform=ccrs.PlateCarree(), cmap=cmap)
+        ax2.gridlines(color='black', linestyle='dotted')
+
+        ax3 = fig.add_subplot(n_images, 3, (i * 3) + 3, projection=ccrs.PlateCarree())
+        if isinstance(flip, list) and flip[i]:
+            ax3.imshow(img, transform=ccrs.PlateCarree(), cmap=reversed_cmap)
+        else:
+            ax3.imshow(img, transform=ccrs.PlateCarree(), cmap=cmap)
+        ax3.gridlines(color='black', linestyle='dotted')
+
+        divider = make_axes_locatable(ax3)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        fig.colorbar(img, cax=cax)
+
     plt.show()
