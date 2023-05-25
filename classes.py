@@ -1,51 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from sources.stars import *
 from functions import *
-
-
-class Star:
-    def __init__(self, mass=1, temperature=5772, radius=1):
-        self.mass = mass * 1.98847 * 10 ** 30  # In Solar Masses
-        self.temperature = temperature  # In Kelvins
-        self.radius = radius * 696342000  # In Solar Radii
-        # Luminosity
-        self.flux = 5.670374419 * 10 ** (-8) * self.temperature ** 4
-        self.luminosity = self.flux * 4 * np.pi * self.radius ** 2
-
-    def peakWaveLength(self, temperature=None):
-        if temperature is None:
-            temperature = self.temperature
-        return 2.897771955 * 10 ** (-3) / temperature
-
-    def peakFrequency(self, temperature=None):
-        if temperature is None:
-            temperature = self.temperature
-        return 5.879 * 10 ** 10 * temperature
-
-    def emissionSpectrum(self, start, end, N, temperature=None, plot=False):
-        wavelengths = np.linspace(start, end, num=N)
-        if temperature is None:
-            temperature = self.temperature
-        h = 6.62607015 * 10 ** (-34)  # Planck Constant
-        c = 299792458  # Speed of light
-        k = 1.380649 * 10 ** (-23)  # Boltzmann constant
-        e0 = 8.85418781762039 * 10 ** (-12)  # Vacuum permittivity
-        intensities = (2 * h * c ** 2 * e0) / (wavelengths ** 5 * (np.exp(h * c / (wavelengths * k * temperature)) - 1))
-
-        if plot:
-            fig = go.Figure(data=go.Scatter(x=wavelengths, y=intensities))
-            fig.update_layout(
-                title="Emission Spectrum",
-                xaxis_title="Wavelength",
-                yaxis_title="Intensity",
-            )
-            fig.add_shape(type="rect", xref="x", yref="paper",
-                x0=4 * 10 ** (-7), y0=0,
-                x1=8 * 10 ** (-7), y1=1,
-                fillcolor="red", opacity=0.2, layer="below",
-            )
-            fig.show()
-        return intensities
 
 
 class Orbit:
@@ -76,13 +32,13 @@ class Orbit:
     def radiusEquation(self, anomaly):
         return (self.semiMajorAxis * (1 - self.eccentricity ** 2)) / (1 + self.eccentricity * np.cos(anomaly))
 
-    def orbitalTrace(self, N=360):
-        anomalies = np.linspace(-np.pi, np.pi, N)
+    def orbitalTrace(self, resolution=360):
+        anomalies = np.linspace(-np.pi, np.pi, resolution)
         radii = self.radiusEquation(anomalies)
         return radii, anomalies
 
-    def orbitalPlot(self, N):
-        anomalies = np.linspace(-np.pi, np.pi, N)
+    def orbitalPlot(self, resolution=360):
+        anomalies = np.linspace(-np.pi, np.pi, resolution)
         radii = self.radiusEquation(anomalies)
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
         ax.plot(anomalies, radii)
@@ -105,19 +61,19 @@ class PlanetNoAtm:
         # Array features
         self.longitudes = None
         self.latitudes = None
-        self.albedos = None
+        self.albedo = None
         self.temperatures = None
         self.emissivity = None
         self.surface_heat_capacity = None
         # Specifics of the simulation run
         self.rotation_type = None
 
-    def create_maps(self, n_longs=100, n_lats=50, mean_albedo=0.3, mean_temperature=0,
+    def createMaps(self, n_longs=100, n_lats=50, mean_albedo=0.3, mean_temperature=0,
                     heat_capacity=None, emissivity=None):
         long = np.linspace(-np.pi, np.pi, num=n_longs)
         lat = np.linspace(-np.pi / 2, np.pi / 2, num=n_lats)
         self.longitudes, self.latitudes = np.meshgrid(long, np.flip(lat))
-        self.albedos = np.full_like(self.longitudes, mean_albedo)
+        self.albedo = np.full_like(self.longitudes, mean_albedo)
         self.temperatures = np.full_like(self.longitudes, mean_temperature)
         if heat_capacity is None:
             self.surface_heat_capacity = np.full_like(self.longitudes, 9.184448 * 10 ** 7)
@@ -148,7 +104,7 @@ class PlanetNoAtm:
             self.rotation_rate = 2 * np.pi / self.rotation_period
             self.rotation_type = rotation_type
 
-    def define_tilt(self, axial_tilt=23.436, NSS_phase=167.05):
+    def defineTilt(self, axial_tilt=23.436, NSS_phase=167.05):
         self.axial_tilt = np.radians(axial_tilt)
         self.NSS_phase = np.radians(NSS_phase)
 
@@ -158,7 +114,7 @@ class PlanetNoAtm:
         else:
             return self.axial_tilt
 
-    def insolation(self, t):
+    def irradiance(self, t):
         anomaly, radius = self.orbit.orbitalPosition(t)
         # HOUR ANGLE
         if self.rotation_type != 'tidally_locked':
@@ -170,12 +126,13 @@ class PlanetNoAtm:
         # DECLINATION ANGLE
         declination_value = self.declination(anomaly)
         declination = np.full_like(self.longitudes, declination_value)
-        incidence = np.sin(self.latitudes) * np.sin(declination) + np.cos(self.latitudes) * np.cos(declination) * np.cos(hours)
+        incidence = np.sin(self.latitudes) * np.sin(declination) + np.cos(self.latitudes) * np.cos(
+            declination) * np.cos(hours)
         incidence = np.maximum(np.zeros_like(self.longitudes), incidence)
         return incidence * self.orbit.foyer.luminosity / (4 * np.pi * radius ** 2)
 
-    def model_derivative(self, t):
-        W_in = self.insolation(t) * (np.ones_like(self.longitudes) - self.albedos)
+    def modelDerivative(self, t):
+        W_in = self.irradiance(t) * (np.ones_like(self.longitudes) - self.albedo)
         W_out = 5.67 * 10 ** (-8) * self.temperatures ** 4
         dTdt = (W_in - W_out) / self.surface_heat_capacity
         return dTdt
@@ -185,11 +142,11 @@ class ExoSimulation:
     def __init__(self, planet=None):
         if planet is None:
             self.planet = PlanetNoAtm()
-            self.planet.create_maps()
+            self.planet.createMaps()
         else:
             self.planet = planet
 
-    def run(self, T=None, dt=hours_to_seconds(2), save_gif=True):
+    def run(self, T=None, dt=hoursToSeconds(2), save_gif=True):
         if T is None:
             T = self.planet.orbit.period
         T = self.planet.orbit.period * T
@@ -216,7 +173,7 @@ class ExoSimulation:
         for i in range(N):
             plt.pause(0.001)
             # Heatmap Computing
-            self.planet.temperatures = self.planet.temperatures + dt * self.planet.model_derivative(t)
+            self.planet.temperatures = self.planet.temperatures + dt * self.planet.modelDerivative(t)
             I = self.planet.insolation(t)
             # Orbit Computing
             t = t + dt

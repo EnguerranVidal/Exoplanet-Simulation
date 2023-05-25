@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import opensimplex
 
 import matplotlib.pyplot as plt
@@ -11,8 +12,16 @@ from scipy.spatial import SphericalVoronoi, geometric_slerp
 from scipy.interpolate import griddata
 
 
-def hours_to_seconds(t):
+def hoursToSeconds(t):
     return t * 3600
+
+
+def findClosestFactors(number):
+    factor1 = int(number ** 0.5)
+    while number % factor1 != 0:
+        factor1 -= 1
+    factor2 = number // factor1
+    return factor1, factor2
 
 
 def fibonacciSphereDistribution(samples=1000, plot=False):
@@ -73,7 +82,6 @@ def interpolateSphere3D(points, values, num_latitudes, num_longitudes, method='n
     # Interpolate the values on the grid using nearest-neighbor interpolation
     image = griddata((X, Y, Z), values, (gx, gy, gz), method)
     return image
-
 
 
 def cartesianToGeographic(X, Y, Z):
@@ -199,13 +207,13 @@ def generatePlanetMap(points, parameters: dict, oceans=True, caps=True, seed=0, 
     if plot:
         elevationImage = interpolateSphere3D(points, elevation, num_longitudes=500, num_latitudes=250)
         albedoImage = interpolateSphere3D(points, albedo, num_longitudes=500, num_latitudes=250)
-        polesViewGraph([elevationImage, albedoImage], flip=[False, True])
+        polesViewGraph([elevationImage, albedoImage])
+        plateCarreeGraphView([elevationImage, albedoImage])
 
     return albedo, elevation
 
 
 def polesViewGraph(images, flip=None):
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
     fig = plt.figure(figsize=(15, 8))
     cmap = plt.get_cmap('inferno')
     reversed_cmap = colors.ListedColormap(cmap.colors[::-1])
@@ -216,29 +224,49 @@ def polesViewGraph(images, flip=None):
 
     n_images = len(images)
     for i, img in enumerate(images):
-        ax1 = fig.add_subplot(n_images, 3, (i * 3) + 1, projection=ccrs.Orthographic(0, 90))
+        ax1 = fig.add_subplot(n_images, 2, (i * 2) + 1, projection=ccrs.Orthographic(0, 90))
         if isinstance(flip, list) and flip[i]:
             ax1.imshow(img, transform=ccrs.PlateCarree(), cmap=reversed_cmap)
         else:
             ax1.imshow(img, transform=ccrs.PlateCarree(), cmap=cmap)
         ax1.gridlines(color='black', linestyle='dotted')
 
-        ax2 = fig.add_subplot(n_images, 3, (i * 3) + 2, projection=ccrs.Orthographic(0, -90))
+        ax2 = fig.add_subplot(n_images, 2, (i * 2) + 2, projection=ccrs.Orthographic(0, -90))
         if isinstance(flip, list) and flip[i]:
             ax2.imshow(img, transform=ccrs.PlateCarree(), cmap=reversed_cmap)
         else:
             ax2.imshow(img, transform=ccrs.PlateCarree(), cmap=cmap)
         ax2.gridlines(color='black', linestyle='dotted')
 
-        ax3 = fig.add_subplot(n_images, 3, (i * 3) + 3, projection=ccrs.PlateCarree())
-        if isinstance(flip, list) and flip[i]:
-            ax3.imshow(img, transform=ccrs.PlateCarree(), cmap=reversed_cmap)
-        else:
-            ax3.imshow(img, transform=ccrs.PlateCarree(), cmap=cmap)
-        ax3.gridlines(color='black', linestyle='dotted')
-
-        divider = make_axes_locatable(ax3)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        fig.colorbar(img, cax=cax)
-
     plt.show()
+
+
+def plateCarreeGraph(image, cmap='inferno', title=''):
+    fig = plt.figure(figsize=(15, 8))
+    ax = plt.axes(projection=ccrs.PlateCarree())
+    ax.imshow(image, origin='upper', extent=[-180, 180, -90, 90], transform=ccrs.PlateCarree(), cmap=cmap)
+
+    # Customize plot
+    ax.gridlines(draw_labels=True)
+    ax.set_title(title)
+
+    # Display plot
+    plt.show()
+
+
+def plateCarreeGraphView(images, cmap='inferno'):
+    if isinstance(images, np.ndarray):
+        images = [images]
+    fig, axes = plt.subplots(nrows=1, ncols=len(images), figsize=(15, 5), subplot_kw={'projection': ccrs.PlateCarree()})
+    for i, image in enumerate(images):
+        ax = axes[i]
+        # Plot image with "inferno" colormap
+        img = ax.imshow(image, origin='upper', extent=[-180, 180, -90, 90], transform=ccrs.PlateCarree(), cmap=cmap)
+        ax.gridlines(draw_labels=True)
+        ax.set_title(f"Image {i + 1}")
+        if i == 0:
+            contour = ax.contour(image, levels=[0], colors='white', linewidths=1.5)
+
+    plt.tight_layout()
+    plt.show()
+
