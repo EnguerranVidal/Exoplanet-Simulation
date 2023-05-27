@@ -35,12 +35,21 @@ class Planet:
         if distribution == 'sunflower':
             points = sunflowerSphereDistribution(nbPoints)
             radii, longitudes, latitudes = cartesianToGeographic(points[:, 0], points[:, 1], points[:, 2])
+
         elif distribution == 'fibonacci':
             points = fibonacciSphereDistribution(nbPoints)
             radii, longitudes, latitudes = cartesianToGeographic(points[:, 0], points[:, 1], points[:, 2])
+
         else:
-            longitudeSpace = np.linspace(-np.pi, np.pi, )
-            # TODO Add normal mercator longitude x latitude mesh
+            nbLong, nbLat = findClosestFactors(nbPoints)  # Grid dimensions from nbPoints
+            longitudeSpace = np.linspace(-np.pi, np.pi, nbLong)
+            latitudeSpace = np.linspace(-np.pi/2, np.pi/2, nbLat)
+            longitudeMesh, latitudeMesh = np.meshgrid(longitudeSpace, latitudeSpace)
+            longitudes, latitudes = longitudeMesh.ravel(), latitudeMesh.ravel()
+            radii = np.full_like(longitudes, 1)
+            X, Y, Z = geographicToCartesian(radii, longitudes, latitudes)
+            points = np.column_stack([X, Y, Z])
+
         albedo, elevation = generatePlanetMap(points, parameters, oceans=oceans, caps=caps, seed=seed)
         # Defining Value Maps
         self.longitudes = longitudes

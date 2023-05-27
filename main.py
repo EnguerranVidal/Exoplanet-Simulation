@@ -11,7 +11,7 @@ def testGeneration():
                   'TERRAIN_ALBEDO': 0.4,
                   'OCEAN_ALBEDO': 0.06,
                   'CAPS_ALBEDO': 0.9,
-                  'CAPS_EXTENT': 10}
+                  'CAPS_EXTENT': 0}
     points = sunflowerSphereDistribution(30000)
     generatePlanetMap(points, parameters, oceans=True, caps=True, seed=seed, plot=True)
 
