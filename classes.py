@@ -1,31 +1,21 @@
 import matplotlib.pyplot as plt
 import numpy as np
-
+from sources.stars import *
 from functions import *
 
 
-class Star:
-    def __init__(self, mass=1, temperature=5772, radius=1):
-        self.mass = mass * 1.98847 * 10 ** 30  # In Solar Masses
-        self.temperature = temperature  # In Kelvins
-        self.radius = radius * 696342000  # In Solar Radii
-        # Luminosity
-        self.flux = 5.670374419 * 10 ** (-8) * self.temperature ** 4
-        self.luminosity = self.flux * 4 * np.pi * self.radius ** 2
-
-
 class Orbit:
-    def __init__(self, semi_M_axis=1, eccentricity=0.01671, foyer=Star()):
-        self.semi_M_axis = semi_M_axis * 1.49 * 10 ** 11
+    def __init__(self, semiMajorAxis=1, eccentricity=0.01671, foyer=Star()):
+        self.semiMajorAxis = semiMajorAxis * 1.49 * 10 ** 11
         self.eccentricity = eccentricity
         self.foyer = foyer
         self.G = 6.6740831 * 10 ** (-11)
-        self.period = self.period_calculus()
+        self.period = self.orbitalPeriod()
 
-    def period_calculus(self):
-        return np.sqrt((4 * (np.pi ** 2) * self.semi_M_axis ** 3) / (self.foyer.mass * self.G))
+    def orbitalPeriod(self):
+        return np.sqrt((4 * (np.pi ** 2) * self.semiMajorAxis ** 3) / (self.foyer.mass * self.G))
 
-    def polar_position(self, epoch):
+    def orbitalPosition(self, epoch):
         n = (2 * np.pi) / self.period
         M = n * epoch
         e = self.eccentricity
@@ -33,23 +23,23 @@ class Orbit:
         while E - e * np.sin(E) - M > 10 ** (-8):
             E = E - (E - e * np.sin(E) - M) / (1 - e * np.cos(E))
         nu = 2 * np.arctan(np.sqrt((1 + e) / (1 - e)) * np.tan(E / 2))
-        radius = self.radius_equation(nu)
+        radius = self.radiusEquation(nu)
         return nu, radius
 
-    def kepler_equation(self, E):
+    def keplerEquation(self, E):
         return E - self.eccentricity * np.sin(E)
 
-    def radius_equation(self, anomaly):
-        return (self.semi_M_axis * (1 - self.eccentricity ** 2)) / (1 + self.eccentricity * np.cos(anomaly))
+    def radiusEquation(self, anomaly):
+        return (self.semiMajorAxis * (1 - self.eccentricity ** 2)) / (1 + self.eccentricity * np.cos(anomaly))
 
-    def orbit_trace(self, N=360):
-        anomalies = np.linspace(-np.pi, np.pi, N)
-        radii = self.radius_equation(anomalies)
+    def orbitalTrace(self, resolution=360):
+        anomalies = np.linspace(-np.pi, np.pi, resolution)
+        radii = self.radiusEquation(anomalies)
         return radii, anomalies
 
-    def plot_orbit(self, N):
-        anomalies = np.linspace(-np.pi, np.pi, N)
-        radii = self.radius_equation(anomalies)
+    def orbitalPlot(self, resolution=360):
+        anomalies = np.linspace(-np.pi, np.pi, resolution)
+        radii = self.radiusEquation(anomalies)
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
         ax.plot(anomalies, radii)
         ax.set_rticks([0.5, 1, 1.5, 2])  # Less radial ticks
@@ -71,19 +61,19 @@ class PlanetNoAtm:
         # Array features
         self.longitudes = None
         self.latitudes = None
-        self.albedos = None
+        self.albedo = None
         self.temperatures = None
         self.emissivity = None
         self.surface_heat_capacity = None
         # Specifics of the simulation run
         self.rotation_type = None
 
-    def create_maps(self, n_longs=100, n_lats=50, mean_albedo=0.3, mean_temperature=0,
+    def createMaps(self, n_longs=100, n_lats=50, mean_albedo=0.3, mean_temperature=0,
                     heat_capacity=None, emissivity=None):
         long = np.linspace(-np.pi, np.pi, num=n_longs)
         lat = np.linspace(-np.pi / 2, np.pi / 2, num=n_lats)
         self.longitudes, self.latitudes = np.meshgrid(long, np.flip(lat))
-        self.albedos = np.full_like(self.longitudes, mean_albedo)
+        self.albedo = np.full_like(self.longitudes, mean_albedo)
         self.temperatures = np.full_like(self.longitudes, mean_temperature)
         if heat_capacity is None:
             self.surface_heat_capacity = np.full_like(self.longitudes, 9.184448 * 10 ** 7)
@@ -114,7 +104,7 @@ class PlanetNoAtm:
             self.rotation_rate = 2 * np.pi / self.rotation_period
             self.rotation_type = rotation_type
 
-    def define_tilt(self, axial_tilt=23.436, NSS_phase=167.05):
+    def defineTilt(self, axial_tilt=23.436, NSS_phase=167.05):
         self.axial_tilt = np.radians(axial_tilt)
         self.NSS_phase = np.radians(NSS_phase)
 
@@ -124,8 +114,8 @@ class PlanetNoAtm:
         else:
             return self.axial_tilt
 
-    def insolation(self, t):
-        anomaly, radius = self.orbit.polar_position(t)
+    def irradiance(self, t):
+        anomaly, radius = self.orbit.orbitalPosition(t)
         # HOUR ANGLE
         if self.rotation_type != 'tidally_locked':
             assert self.rotation_rate is not None
@@ -136,12 +126,13 @@ class PlanetNoAtm:
         # DECLINATION ANGLE
         declination_value = self.declination(anomaly)
         declination = np.full_like(self.longitudes, declination_value)
-        incidence = np.sin(self.latitudes) * np.sin(declination) + np.cos(self.latitudes) * np.cos(declination) * np.cos(hours)
+        incidence = np.sin(self.latitudes) * np.sin(declination) + np.cos(self.latitudes) * np.cos(
+            declination) * np.cos(hours)
         incidence = np.maximum(np.zeros_like(self.longitudes), incidence)
         return incidence * self.orbit.foyer.luminosity / (4 * np.pi * radius ** 2)
 
-    def model_derivative(self, t):
-        W_in = self.insolation(t) * (np.ones_like(self.longitudes) - self.albedos)
+    def modelDerivative(self, t):
+        W_in = self.irradiance(t) * (np.ones_like(self.longitudes) - self.albedo)
         W_out = 5.67 * 10 ** (-8) * self.temperatures ** 4
         dTdt = (W_in - W_out) / self.surface_heat_capacity
         return dTdt
@@ -151,11 +142,11 @@ class ExoSimulation:
     def __init__(self, planet=None):
         if planet is None:
             self.planet = PlanetNoAtm()
-            self.planet.create_maps()
+            self.planet.createMaps()
         else:
             self.planet = planet
 
-    def run(self, T=None, dt=hours_to_seconds(2), save_gif=True):
+    def run(self, T=None, dt=hoursToSeconds(2), save_gif=True):
         if T is None:
             T = self.planet.orbit.period
         T = self.planet.orbit.period * T
@@ -166,14 +157,14 @@ class ExoSimulation:
         fig = plt.figure()
         # Orbit Plot
         ax1 = fig.add_subplot(121, projection='polar')
-        radii, angles = self.planet.orbit.orbit_trace()
+        radii, angles = self.planet.orbit.orbitalTrace()
         trace = ax1.plot(angles, radii, c='b')
-        angle, radius = self.planet.orbit.polar_position(t)
+        angle, radius = self.planet.orbit.orbitalPosition(t)
         position = ax1.scatter(angle, radius, c='darkblue', alpha=0.5)
         # Heatmap plot
         ax2 = fig.add_subplot(122)
         I = self.planet.insolation(t)
-        # heatmap = ax2.imshow(self.planet.temperatures, vmin=0, vmax=400, cmap='inferno')
+        # heatmap = ax2.imshow(self.planets.temperatures, vmin=0, vmax=400, cmap='inferno')
         heatmap = ax2.imshow(I, vmin=0, vmax=1500, cmap='inferno')
         plt.colorbar(heatmap)
         # MAIN LOOP
@@ -182,15 +173,15 @@ class ExoSimulation:
         for i in range(N):
             plt.pause(0.001)
             # Heatmap Computing
-            self.planet.temperatures = self.planet.temperatures + dt * self.planet.model_derivative(t)
+            self.planet.temperatures = self.planet.temperatures + dt * self.planet.modelDerivative(t)
             I = self.planet.insolation(t)
             # Orbit Computing
             t = t + dt
-            radius, angle = self.planet.orbit.polar_position(t)
+            radius, angle = self.planet.orbit.orbitalPosition(t)
             Offset = np.array([radius, angle])
             Offset = Offset
             # Updating plot
-            # heatmap.set_data(self.planet.temperatures)
+            # heatmap.set_data(self.planets.temperatures)
             heatmap.set_data(I)
             position.set_offsets(Offset)
             plt.draw()
